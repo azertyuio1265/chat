@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omegle Clone</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #emojiContainer {
+            font-size: 24px;
+        }
+
+        #videoContainer {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        #videoContainer div {
+            width: 45%;
+            border: 2px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+        }
+
+        #videoControls {
+            text-align: center;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 5px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #connectedUsers {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background-color: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="connectedUsers">Online: <span id="usersCount">0</span></div>
+    <div id="header">
+        <h1>Omegle Clone</h1>
+        <div id="emojiContainer">
+            <span class="emoji">😊</span>
+            <span class="emoji">😎</span>
+            <span class="emoji">😂</span>
+            <span class="emoji">❤️</span>
+            <!-- Add more emoji spans as needed -->
+        </div>
+    </div>
+    <div id="videoContainer">
+        <div id="localVideo">
+            <video id="localVideoElement" autoplay muted playsinline></video>
+        </div>
+        <div id="remoteVideo">
+            <video id="remoteVideoElement" autoplay playsinline></video>
+        </div>
+    </div>
+    <div id="videoControls">
+        <button id="startButton">Start</button>
+        <button id="stopButton">Stop</button>
+        <button id="skipButton">Skip</button>
+    </div>
+
+    
+        <script>
+        // JavaScript code here
+        // في البداية، يكون عدد الأشخاص المتصلين صفر
+        let connectedUsersCount = 0;
+
+        // تحديث عدد الأشخاص المتصلين
+        function updateConnectedUsersCount(count) {
+            connectedUsersCount = count;
+            document.getElementById('usersCount').textContent = connectedUsersCount;
+        }
+
+        // تحديث عدد الأشخاص المتصلين بشكل دوري (يمكنك ضبط الوقت حسب احتياجاتك)
+        setInterval(() => {
+            // هنا يجب استدعاء دالة تحديث عدد الأشخاص المتصلين
+            // يمكنك تقديم قيمة عشوائية لتظهر كنموذج لعدد الأشخاص المتصلين
+            let randomCount = Math.floor(Math.random() * 1000); // عدد عشوائي بين 1000 و 1500
+            updateConnectedUsersCount(randomCount);
+        }, 5000); // يتم تحديث العداد كل 5 ثوانٍ
+
+        window.onload = function() {
+            let localStream;
+            let remoteStream;
+            let localPeerConnection;
+            let remotePeerConnection;
+
+            const startButton = document.getElementById('startButton');
+            const stopButton = document.getElementById('stopButton');
+            const skipButton = document.getElementById('skipButton');
+            const localVideo = document.getElementById('localVideo');
+            const remoteVideo = document.getElementById('remoteVideo');
+
+            startButton.addEventListener('click', startBroadcast);
+            stopButton.addEventListener('click', stopBroadcast);
+            skipButton.addEventListener('click', skipRemoteVideo);
+
+            async function startBroadcast() {
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    localVideo.srcObject = localStream;
+
+                    const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+                    localPeerConnection = new RTCPeerConnection(configuration);
+                    localStream.getTracks().forEach(track => localPeerConnection.addTrack(track, localStream));
+                    localPeerConnection.onicecandidate = event => {
+                        if (event.candidate) {
+                            remotePeerConnection.addIceCandidate(event.candidate);
+                        }
+                    };
+
+                    remotePeerConnection = new RTCPeerConnection(configuration);
+                    remotePeerConnection.ontrack = event => {
+                        remoteVideo.srcObject = event.streams[0];
+                        remoteStream = event.streams[0];
+                    };
+                    remotePeerConnection.onicecandidate = event => {
+                        if (event.candidate) {
+                            localPeerConnection.addIceCandidate(event.candidate);
+                        }
+                    };
+
+                    const offer = await localPeerConnection.createOffer();
+                    await localPeerConnection.setLocalDescription(offer);
+                    await remotePeerConnection.setRemoteDescription(offer);
+
+                    const answer = await remotePeerConnection.createAnswer();
+                    await remotePeerConnection.setLocalDescription(answer);
+                    await localPeerConnection.setRemoteDescription(answer);
+                } catch (error) {
+                    console.error('Error starting broadcast:', error);
+                }
+            }
+
+            function stopBroadcast() {
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                    localStream = null;
+                }
+                if (remoteStream) {
+                    remoteStream.getTracks().forEach(track => track.stop());
+                    remoteStream = null;
+                }
+                localVideo.srcObject = null;
+                remoteVideo.srcObject = null;
+                if (localPeerConnection) {
+                    localPeerConnection.close();
+                    localPeerConnection = null;
+                }
+                if (remotePeerConnection) {
+                    remotePeerConnection.close();
+                    remotePeerConnection = null;
+                }
+            }
+
+            function skipRemoteVideo() {
+                remoteVideo.srcObject = null;
+
+                // إغلاق الاتصال الحالي إذا كان موجودًا
+                if (remotePeerConnection) {
+                    remotePeerConnection.close();
+                    remotePeerConnection = null;
+                }
+
+                // بدء البحث عن مستخدمين بشكل عشوائي وتكوين الاتصال معهم
+                startRandomConnection();
+            }
+
+            // دالة لتوليد معرف عشوائي للمستخدم
+            function generateRandomUserId() {
+                return Math.random().toString(36).substr(2, 9); // توليد سلسلة عشوائية من 9 أحرف
+            }
+
+            // دالة لبدء الاتصال مع مستخدم عشوائي
+            function startRandomConnection() {
+                const randomUserId = generateRandomUserId(); // توليد معرف عشوائي للمستخدم المحلي
+                const remoteUserId = generateRandomUserId(); // توليد معرف عشوائي للمستخدم البعيد
+                
+                // يمكنك استخدام randomUserId و remoteUserId لتكوين الاتصال بين المستخدمين
+                // يجب على كل مستخدم أن يرسل معرفه إلى الآخر لتكوين الاتصال بينهما
+                // يمكنك استخدام WebRTC لإنشاء وإدارة الاتصال بين المستخدمين
+                // يجب تنفيذ هذا الجز
+
+            // بدء الاتصال بين المستخدمين
+            // يمكنك استخدام remoteUserId لإرسال الطلب إلى المستخدم البعيد
+            // يتم التعامل مع الاستجابة من المستخدم البعيد في الكود الخاص به
+            console.log('Starting connection between users:');
+            console.log('Local User ID:', randomUserId);
+            console.log('Remote User ID:', remoteUserId);
+            // يمكنك هنا استخدام randomUserId و remoteUserId لإرسال الطلب إلى المستخدم البعيد
+        }
+    };
+</script>
+</body>
+</html>
+
+
